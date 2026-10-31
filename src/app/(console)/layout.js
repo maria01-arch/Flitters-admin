@@ -10,7 +10,7 @@ export default async function ConsoleLayout({ children }) {
 
   const nav = [
     { label: 'Dashboard', href: '/' },
-    { label: 'Reports', soon: true, show: can(ctx, 'reports.view') },
+    { label: 'Reports', href: '/reports', show: can(ctx, 'reports.view') },
     { label: 'Users', soon: true, show: can(ctx, 'users.view') },
     { label: 'Ads', soon: true, show: can(ctx, 'ads.review') },
     { label: 'Pricing', soon: true, show: can(ctx, 'pricing.manage') },

@@ -12,6 +12,7 @@ export default function ConfirmDialog({
   busy = false,
   onConfirm,
   onCancel,
+  children,
 }) {
   const cancelRef = useRef(null)
 
@@ -36,6 +37,7 @@ export default function ConfirmDialog({
       <div className="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
         <h2 id="dlg-title">{title}</h2>
         {message ? <p>{message}</p> : null}
+        {children}
         <div className="dlg-actions">
           <button ref={cancelRef} type="button" className="btn" onClick={onCancel} disabled={busy}>
             {cancelLabel}

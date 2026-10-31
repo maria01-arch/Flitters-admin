@@ -3,7 +3,13 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
-const LABELS = { 'auth.sign_in': 'Signed in' }
+const LABELS = {
+  'auth.sign_in': 'Signed in',
+  'content.delete': 'Deleted content',
+  'user.ban': 'Banned a user',
+  'user.unban': 'Unbanned a user',
+  'report.status': 'Changed a report',
+}
 
 function when(iso) {
   return new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
@@ -61,7 +67,7 @@ export default async function Dashboard() {
                 <li key={r.id}>
                   <span>
                     {LABELS[r.action] || r.action}
-                    {r.target_id ? ' · ' + r.target_type + ' ' + r.target_id : ''}
+                    {r.target_id ? ' · ' + r.target_type + ' ' + String(r.target_id).slice(0, 8) : ''}
                   </span>
                   <small>
                     {r.actor_email || 'unknown'} · {when(r.at)}
