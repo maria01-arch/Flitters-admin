@@ -4,6 +4,7 @@ import { getStaffForApi, can } from '@/lib/staff'
 import { writeAudit, clientIp } from '@/lib/audit'
 import { rateLimited } from '@/lib/rateLimit'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { cleanupMedia, urlsFromRows } from '@/lib/r2'
 
 export const runtime = 'nodejs'
 
@@ -54,6 +55,8 @@ export async function POST(req) {
     if (body.action === 'ban') return await ban(args)
     if (body.action === 'unban') return await unban(args)
     if (body.action === 'set_report_status') return await setReportStatus(args)
+    if (body.action === 'set_badge') return await setBadge(args)
+    if (body.action === 'view_message') return await viewMessage(args)
     return json(400, { error: 'Unknown action' })
   } catch (err) {
     console.error('Moderation failed:', err)
@@ -61,17 +64,43 @@ export async function POST(req) {
   }
 }
 
+// Removes the files of deleted rows from R2 (only the owner's own folders).
+async function mediaStep(ctx, admin, ip, rows, ownerId, targetType, targetId) {
+  const urls = urlsFromRows(rows)
+  if (urls.length === 0) return { configured: true, deleted: 0, failed: 0, skipped: 0 }
+  const res = await cleanupMedia(admin, urls, ['posts/' + ownerId + '/', 'reels/' + ownerId + '/'])
+  if (res.configured) {
+    try {
+      await writeAudit({
+        actor: ctx.user, ip, action: 'content.media_delete', targetType, targetId,
+        meta: { deleted: res.deleted.slice(0, 20), failed: res.failed.slice(0, 20), skipped: res.skipped.length },
+      })
+    } catch {}
+  }
+  return { configured: res.configured, deleted: res.deleted.length, failed: res.failed.length, skipped: res.skipped.length }
+}
+
 async function deleteContent({ ctx, admin, body, ip, reportId }) {
   if (!can(ctx, 'content.delete')) return json(403, { error: 'You don’t have permission to delete content' })
   const type = body.type
   const id = String(body.id || '')
-  if (!['post', 'comment', 'reel'].includes(type) || !UUID.test(id)) return json(400, { error: 'Bad request' })
+  if (!['post', 'comment', 'reel', 'reel_comment'].includes(type) || !UUID.test(id)) return json(400, { error: 'Bad request' })
   const now = new Date().toISOString()
   const base = { action: 'content.delete', targetType: type, targetId: id }
 
   if (type === 'post') {
-    const { data: post } = await admin.from('posts').select('id,user_id,thread_id,video_url,content,image_url').eq('id', id).maybeSingle()
+    const { data: post } = await admin.from('posts').select('*').eq('id', id).maybeSingle()
     if (!post) return json(404, { error: 'This post no longer exists' })
+    let siblings = []
+    let reelCopies = []
+    if (post.thread_id) {
+      const r = await admin.from('posts').select('*').eq('thread_id', post.thread_id).eq('user_id', post.user_id)
+      siblings = r.data || []
+    }
+    if (post.video_url) {
+      const r = await admin.from('reels').select('*').eq('user_id', post.user_id).eq('video_url', post.video_url)
+      reelCopies = r.data || []
+    }
     const bad = await auditFirst(ctx, ip, { ...base, before: { user_id: post.user_id, content: snip(post.content), image_url: post.image_url, video_url: post.video_url, thread_id: post.thread_id }, meta: { reportId } })
     if (bad) return bad
     const { error } = await admin.from('posts').delete().eq('id', id)
@@ -83,11 +112,12 @@ async function deleteContent({ ctx, admin, body, ip, reportId }) {
     if (post.thread_id) await admin.from('posts').delete().eq('thread_id', post.thread_id).eq('user_id', post.user_id)
     if (post.video_url) await admin.from('reels').delete().eq('user_id', post.user_id).eq('video_url', post.video_url)
     await admin.from('reports').update({ status: 'actioned', reviewed_at: now }).eq('reported_post_id', id)
-    return json(200, { ok: true, userId: post.user_id })
+    const media = await mediaStep(ctx, admin, ip, [post, ...siblings, ...reelCopies], post.user_id, 'post', id)
+    return json(200, { ok: true, userId: post.user_id, media })
   }
 
   if (type === 'comment') {
-    const { data: comment } = await admin.from('comments').select('id,user_id,content').eq('id', id).maybeSingle()
+    const { data: comment } = await admin.from('comments').select('*').eq('id', id).maybeSingle()
     if (!comment) return json(404, { error: 'This comment no longer exists' })
     const bad = await auditFirst(ctx, ip, { ...base, before: { user_id: comment.user_id, content: snip(comment.content) }, meta: { reportId } })
     if (bad) return bad
@@ -98,11 +128,31 @@ async function deleteContent({ ctx, admin, body, ip, reportId }) {
       return json(500, { error: error.message })
     }
     await admin.from('reports').update({ status: 'actioned', reviewed_at: now }).eq('reported_comment_id', id)
-    return json(200, { ok: true, userId: comment.user_id })
+    const media = await mediaStep(ctx, admin, ip, [comment], comment.user_id, 'comment', id)
+    return json(200, { ok: true, userId: comment.user_id, media })
   }
 
-  const { data: reel } = await admin.from('reels').select('id,user_id,video_url,caption').eq('id', id).maybeSingle()
+  if (type === 'reel_comment') {
+    const { data: rc } = await admin.from('reel_comments').select('id,user_id,content').eq('id', id).maybeSingle()
+    if (!rc) return json(404, { error: 'This comment no longer exists' })
+    const bad = await auditFirst(ctx, ip, { ...base, before: { user_id: rc.user_id, content: snip(rc.content) }, meta: { reportId } })
+    if (bad) return bad
+    const { error } = await admin.from('reel_comments').delete().eq('id', id)
+    if (error) {
+      await auditFailed(ctx, ip, base, error.message)
+      return json(500, { error: error.message })
+    }
+    await admin.from('reports').update({ status: 'actioned', reviewed_at: now }).eq('reported_reel_comment_id', id)
+    return json(200, { ok: true, userId: rc.user_id, media: { configured: true, deleted: 0, failed: 0, skipped: 0 } })
+  }
+
+  const { data: reel } = await admin.from('reels').select('*').eq('id', id).maybeSingle()
   if (!reel) return json(404, { error: 'This reel no longer exists' })
+  let postCopies = []
+  if (reel.video_url) {
+    const r = await admin.from('posts').select('*').eq('user_id', reel.user_id).eq('video_url', reel.video_url)
+    postCopies = r.data || []
+  }
   const bad = await auditFirst(ctx, ip, { ...base, before: { user_id: reel.user_id, caption: snip(reel.caption), video_url: reel.video_url }, meta: { reportId } })
   if (bad) return bad
   await admin.from('reel_likes').delete().eq('reel_id', id)
@@ -114,7 +164,8 @@ async function deleteContent({ ctx, admin, body, ip, reportId }) {
   // A video post and its Reels copy share one video: remove the post copy too.
   if (reel.video_url) await admin.from('posts').delete().eq('user_id', reel.user_id).eq('video_url', reel.video_url)
   await admin.from('reports').update({ status: 'actioned', reviewed_at: now }).eq('reported_reel_id', id)
-  return json(200, { ok: true, userId: reel.user_id })
+  const media = await mediaStep(ctx, admin, ip, [reel, ...postCopies], reel.user_id, 'reel', id)
+  return json(200, { ok: true, userId: reel.user_id, media })
 }
 
 async function ban({ ctx, admin, body, ip, reportId }) {
@@ -186,4 +237,73 @@ async function setReportStatus({ ctx, admin, body, ip }) {
     return json(500, { error: error.message })
   }
   return json(200, { ok: true, status })
+}
+
+async function setBadge({ ctx, admin, body, ip }) {
+  if (!can(ctx, 'badges.grant')) return json(403, { error: 'You don’t have permission to change badges' })
+  const userId = String(body.userId || '')
+  const badge = body.badge
+  const value = body.value === true
+  if (!UUID.test(userId) || !['authentic', 'verified'].includes(badge) || typeof body.value !== 'boolean') {
+    return json(400, { error: 'Bad request' })
+  }
+  const { data: prof } = await admin.from('profiles').select('id,username,verified,is_authentic,verified_plan').eq('id', userId).maybeSingle()
+  if (!prof) return json(404, { error: 'User not found' })
+  // The blue badge also comes from paid plans. Those follow the subscription,
+  // so a hand-given change must never touch them.
+  if (badge === 'authentic' && prof.verified_plan) {
+    return json(400, { error: 'This blue badge comes from a paid plan. It follows the subscription, so it can’t be changed here.' })
+  }
+  const col = badge === 'authentic' ? 'is_authentic' : 'verified'
+  if (!!prof[col] === value) return json(200, { ok: true, value, unchanged: true })
+  const entry = { action: value ? 'badge.grant' : 'badge.remove', targetType: 'user', targetId: userId }
+  const bad = await auditFirst(ctx, ip, { ...entry, before: { [col]: !!prof[col] }, after: { [col]: value }, meta: { badge, username: prof.username || null } })
+  if (bad) return bad
+  const { error } = await admin.from('profiles').update({ [col]: value }).eq('id', userId)
+  if (error) {
+    await auditFailed(ctx, ip, entry, error.message)
+    return json(500, { error: error.message })
+  }
+  return json(200, { ok: true, value })
+}
+
+// Shows ONE reported message and nothing else from the chat. Each view is
+// recorded in the audit log before anything is returned.
+async function viewMessage({ ctx, admin, body, ip }) {
+  if (!can(ctx, 'messages.view_reported')) return json(403, { error: 'You don’t have permission to view reported messages' })
+  if (rateLimited('msgview:' + ctx.user.id, 20, 60_000)) return json(429, { error: 'Slow down a little and try again' })
+  const reportId = String(body.reportId || '')
+  if (!UUID.test(reportId)) return json(400, { error: 'Bad request' })
+  const { data: report } = await admin.from('reports').select('id,reported_message_id').eq('id', reportId).maybeSingle()
+  if (!report || !report.reported_message_id) return json(404, { error: 'This report has no message' })
+
+  let source = 'direct'
+  let { data: msg } = await admin.from('messages').select('*').eq('id', report.reported_message_id).maybeSingle()
+  if (!msg) {
+    source = 'group'
+    const r = await admin.from('group_messages').select('*').eq('id', report.reported_message_id).maybeSingle()
+    msg = r.data
+  }
+  if (!msg) return json(404, { error: 'This message no longer exists' })
+
+  const bad = await auditFirst(ctx, ip, {
+    action: 'message.view_reported',
+    targetType: 'message',
+    targetId: report.reported_message_id,
+    meta: { reportId, source },
+  })
+  if (bad) return bad
+
+  const { data: sender } = await admin.from('profiles').select('username,display_name').eq('id', msg.sender_id).maybeSingle()
+  return json(200, {
+    ok: true,
+    message: {
+      source,
+      sender_id: msg.sender_id,
+      sender: sender || null,
+      content: msg.content == null ? null : String(msg.content).slice(0, 4000),
+      created_at: msg.created_at,
+      media: urlsFromRows([msg]),
+    },
+  })
 }

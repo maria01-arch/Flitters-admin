@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import ConfirmDialog from '@/components/ConfirmDialog'
+import BanFields from '@/components/BanFields'
+import { call } from '@/lib/clientApi'
 
 const REASONS = {
   child_safety: 'Child sexual abuse or exploitation',
@@ -12,15 +14,8 @@ const REASONS = {
   other: 'Something else',
 }
 
-const DURATIONS = [
-  { value: '24', label: '1 day' },
-  { value: '72', label: '3 days' },
-  { value: '168', label: '7 days' },
-  { value: '720', label: '30 days' },
-  { value: 'perm', label: 'Permanent' },
-]
-
-const KIND_LABEL = { post: 'Post', comment: 'Comment', reel: 'Reel', message: 'Message', user: 'User', unknown: 'Unknown' }
+const KIND_LABEL = { post: 'Post', comment: 'Comment', reel: 'Reel', reel_comment: 'Reel comment', message: 'Message', user: 'User', unknown: 'Unknown' }
+const DELETABLE = ['post', 'comment', 'reel', 'reel_comment']
 
 function ago(iso) {
   const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
@@ -30,25 +25,18 @@ function ago(iso) {
   return Math.floor(s / 86400) + ' d ago'
 }
 
-async function call(body) {
-  const res = await fetch('/api/moderation', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const j = await res.json().catch(() => ({}))
-  if (res.status === 401) {
-    window.location.href = '/login'
-    throw new Error('Please sign in again')
-  }
-  if (!res.ok) throw new Error(j.error || 'Something went wrong (' + res.status + ')')
-  return j
+function mediaKind(url) {
+  const path = String(url).split('?')[0].toLowerCase()
+  if (/\.(mp4|mov|webm|m4v)$/.test(path)) return 'video'
+  if (/\.(m4a|mp3|aac|wav|ogg|caf)$/.test(path)) return 'audio'
+  return 'image'
 }
 
 export default function ReportsClient({ initial, filter, perms }) {
   const [items, setItems] = useState(initial)
   const [shown, setShown] = useState({})
-  const [dlg, setDlg] = useState(null) // { kind: 'delete' | 'ban' | 'unban', item }
+  const [msgs, setMsgs] = useState({})
+  const [dlg, setDlg] = useState(null) // { kind: 'delete' | 'ban' | 'unban' | 'viewmsg', item }
   const [hours, setHours] = useState('72')
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
@@ -57,7 +45,7 @@ export default function ReportsClient({ initial, filter, perms }) {
 
   useEffect(() => {
     if (!msg) return undefined
-    const t = setTimeout(() => setMsg(null), 7000)
+    const t = setTimeout(() => setMsg(null), 9000)
     return () => clearTimeout(t)
   }, [msg])
 
@@ -79,6 +67,14 @@ export default function ReportsClient({ initial, filter, perms }) {
     }
   }
 
+  function mediaNote(m) {
+    if (!m) return ''
+    if (!m.configured) return ' Files were not removed from storage (storage keys are not set up yet).'
+    if (m.failed > 0) return ' ' + m.deleted + ' file(s) removed, ' + m.failed + ' could not be removed.'
+    if (m.deleted > 0) return ' ' + m.deleted + ' file(s) removed from storage.'
+    return ''
+  }
+
   async function confirm() {
     const { kind, item } = dlg
     setBusy(true)
@@ -92,7 +88,7 @@ export default function ReportsClient({ initial, filter, perms }) {
               : x
           )
         )
-        setMsg({ ok: true, text: 'Deleted. You can still ban the author from this card.' })
+        setMsg({ ok: true, text: 'Deleted.' + mediaNote(j.media) + ' You can still ban the author from this card.' })
       } else if (kind === 'ban') {
         const j = await call({
           action: 'ban',
@@ -112,6 +108,15 @@ export default function ReportsClient({ initial, filter, perms }) {
           return n
         })
         setMsg({ ok: true, text: 'User unbanned.' })
+      } else if (kind === 'viewmsg') {
+        const j = await call({ action: 'view_message', reportId: item.id })
+        setMsgs((prev) => ({ ...prev, [item.id]: j.message }))
+        setShown((prev) => ({ ...prev, [item.id]: true }))
+        setItems((prev) =>
+          prev.map((x) =>
+            x.id === item.id ? { ...x, offenderId: x.offenderId || j.message.sender_id, offender: x.offender || j.message.sender } : x
+          )
+        )
       }
     } catch (e) {
       setMsg({ ok: false, text: e.message })
@@ -126,19 +131,24 @@ export default function ReportsClient({ initial, filter, perms }) {
   if (dlg) {
     const nm = nameOf(dlg.item.offender)
     if (dlg.kind === 'delete') {
-      title = 'Delete this ' + dlg.item.kind + '?'
+      title = 'Delete this ' + KIND_LABEL[dlg.item.kind].toLowerCase() + '?'
       message =
         dlg.item.kind === 'comment'
           ? 'The comment and any replies under it are removed for everyone. This cannot be undone.'
           : dlg.item.kind === 'post'
-          ? 'The post (and the rest of its thread) is removed for everyone. This cannot be undone.'
-          : 'The reel is removed for everyone. This cannot be undone.'
+          ? 'The post (and the rest of its thread) is removed for everyone, and its files are deleted from storage. This cannot be undone.'
+          : dlg.item.kind === 'reel'
+          ? 'The reel is removed for everyone, and its files are deleted from storage. This cannot be undone.'
+          : 'The comment is removed for everyone. This cannot be undone.'
     } else if (dlg.kind === 'ban') {
       title = 'Ban ' + nm + '?'
       message = 'They can’t sign in until the ban ends. Someone already signed in can carry on for up to an hour.'
-    } else {
+    } else if (dlg.kind === 'unban') {
       title = 'Unban ' + nm + '?'
       message = 'They will be able to sign in again right away.'
+    } else {
+      title = 'View this reported message?'
+      message = 'Only this one message is shown, nothing else from the chat. Your view is recorded in the audit log.'
     }
   }
 
@@ -162,8 +172,9 @@ export default function ReportsClient({ initial, filter, perms }) {
       ) : null}
 
       {items.map((item) => {
-        const hasContent = item.kind === 'post' || item.kind === 'comment' || item.kind === 'reel'
+        const hasContent = DELETABLE.includes(item.kind)
         const t = item.target
+        const m = msgs[item.id]
         const urgent = item.reason === 'child_safety' && item.status === 'pending'
         const bannedUntil = item.offenderId ? banned[item.offenderId] : null
         return (
@@ -180,14 +191,45 @@ export default function ReportsClient({ initial, filter, perms }) {
             </div>
 
             {item.details ? <p className="details">{item.details}</p> : null}
-            {bannedUntil ? <p className="note">{nameOf(item.offender)} is banned ({bannedUntil === 'permanent' ? 'permanent' : 'until ' + String(bannedUntil).slice(0, 16).replace('T', ' ') + ' UTC'}).</p> : null}
+            {bannedUntil ? (
+              <p className="note">
+                {nameOf(item.offender)} is banned (
+                {bannedUntil === 'permanent' ? 'permanent' : 'until ' + String(bannedUntil).slice(0, 16).replace('T', ' ') + ' UTC'}).
+              </p>
+            ) : null}
 
-            {item.kind === 'message' ? <p className="hint">Private message. The content is not shown here.</p> : null}
+            {item.kind === 'message' && !m ? (
+              <p className="hint">
+                {perms.canViewMessage
+                  ? 'This report is about a private message. You can open just that one message.'
+                  : 'This report is about a private message. Your role can’t open it.'}
+              </p>
+            ) : null}
 
-            {shown[item.id] && t ? (
+            {item.kind === 'message' && m ? (
+              <div className="preview">
+                <small className="meta">
+                  Reported message (the only part of the chat you can see) · from{' '}
+                  {m.sender ? m.sender.display_name + ' (@' + m.sender.username + ')' : 'unknown'} · {m.source === 'group' ? 'group chat' : 'direct chat'}
+                </small>
+                {m.content ? <p className="content">{m.content}</p> : null}
+                {m.media.map((u) => {
+                  const k = mediaKind(u)
+                  return k === 'video' ? (
+                    <video key={u} src={u} controls playsInline preload="none" />
+                  ) : k === 'audio' ? (
+                    <audio key={u} src={u} controls preload="none" />
+                  ) : (
+                    <img key={u} src={u} alt="" loading="lazy" />
+                  )
+                })}
+              </div>
+            ) : null}
+
+            {shown[item.id] && t && item.kind !== 'message' ? (
               <div className="preview">
                 {t.missing ? (
-                  <p>{t.deleted ? 'This ' + item.kind + ' has been deleted.' : 'This ' + item.kind + ' no longer exists.'}</p>
+                  <p>{t.deleted ? 'This ' + KIND_LABEL[item.kind].toLowerCase() + ' has been deleted.' : 'This ' + KIND_LABEL[item.kind].toLowerCase() + ' no longer exists.'}</p>
                 ) : (
                   <>
                     <small className="meta">
@@ -207,9 +249,14 @@ export default function ReportsClient({ initial, filter, perms }) {
                   {shown[item.id] ? 'Hide content' : 'Show content'}
                 </button>
               ) : null}
+              {item.kind === 'message' && perms.canViewMessage && !m ? (
+                <button type="button" className="btn btn-small" onClick={() => openDialog('viewmsg', item)}>
+                  View reported message
+                </button>
+              ) : null}
               {hasContent && perms.canDelete && !(t && t.missing) ? (
                 <button type="button" className="btn btn-small btn-danger" onClick={() => openDialog('delete', item)}>
-                  Delete {item.kind}
+                  Delete {KIND_LABEL[item.kind].toLowerCase()}
                 </button>
               ) : null}
               {perms.canBan && item.offenderId ? (
@@ -221,6 +268,11 @@ export default function ReportsClient({ initial, filter, perms }) {
                 <button type="button" className="btn btn-small" onClick={() => openDialog('unban', item)}>
                   Unban
                 </button>
+              ) : null}
+              {perms.canViewUsers && item.offenderId ? (
+                <a className="btn btn-small" href={'/users/' + item.offenderId}>
+                  View profile
+                </a>
               ) : null}
               {perms.canResolve && item.status === 'pending' ? (
                 <>
@@ -241,29 +293,14 @@ export default function ReportsClient({ initial, filter, perms }) {
         open={!!dlg}
         title={title}
         message={message}
-        confirmLabel={dlg && dlg.kind === 'delete' ? 'Delete' : dlg && dlg.kind === 'ban' ? 'Ban' : 'Unban'}
-        danger={!!dlg && dlg.kind !== 'unban'}
+        confirmLabel={dlg && dlg.kind === 'delete' ? 'Delete' : dlg && dlg.kind === 'ban' ? 'Ban' : dlg && dlg.kind === 'unban' ? 'Unban' : 'View message'}
+        danger={!!dlg && (dlg.kind === 'delete' || dlg.kind === 'ban')}
         busy={busy}
         onConfirm={confirm}
         onCancel={() => setDlg(null)}
       >
         {dlg && dlg.kind === 'ban' ? (
-          <div className="stack">
-            <label className="field">
-              <span>How long</span>
-              <select value={hours} onChange={(e) => setHours(e.target.value)}>
-                {DURATIONS.filter((d) => d.value !== 'perm' || perms.canBanPermanent).map((d) => (
-                  <option key={d.value} value={d.value}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Reason (kept in the audit log)</span>
-              <input value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} />
-            </label>
-          </div>
+          <BanFields hours={hours} setHours={setHours} reason={reason} setReason={setReason} canPermanent={perms.canBanPermanent} />
         ) : null}
       </ConfirmDialog>
 

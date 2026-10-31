@@ -9,6 +9,10 @@ const LABELS = {
   'user.ban': 'Banned a user',
   'user.unban': 'Unbanned a user',
   'report.status': 'Changed a report',
+  'badge.grant': 'Gave a badge',
+  'badge.remove': 'Removed a badge',
+  'message.view_reported': 'Viewed a reported message',
+  'content.media_delete': 'Removed files from storage',
 }
 
 function when(iso) {

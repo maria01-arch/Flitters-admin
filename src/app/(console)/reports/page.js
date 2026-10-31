@@ -23,7 +23,7 @@ export default async function ReportsPage({ searchParams }) {
 
   let q = admin
     .from('reports')
-    .select('id,reporter_id,reported_user_id,reported_post_id,reported_comment_id,reported_message_id,reported_reel_id,reason,details,status,created_at')
+    .select('*')
     .order('created_at', { ascending: false })
     .limit(100)
   if (filter === 'pending') q = q.eq('status', 'pending')
@@ -41,23 +41,26 @@ export default async function ReportsPage({ searchParams }) {
   const postIds = ids('reported_post_id')
   const commentIds = ids('reported_comment_id')
   const reelIds = ids('reported_reel_id')
+  const reelCommentIds = ids('reported_reel_comment_id')
 
-  const [posts, comments, reels] = await Promise.all([
+  const [posts, comments, reels, reelComments] = await Promise.all([
     postIds.length ? admin.from('posts').select('id,user_id,content,image_url,video_url,created_at').in('id', postIds) : none,
     commentIds.length ? admin.from('comments').select('id,user_id,content,created_at').in('id', commentIds) : none,
     reelIds.length ? admin.from('reels').select('id,user_id,video_url,caption,created_at').in('id', reelIds) : none,
+    reelCommentIds.length ? admin.from('reel_comments').select('id,user_id,content,created_at').in('id', reelCommentIds) : none,
   ])
   const byId = (res) => new Map((res.data || []).map((x) => [x.id, x]))
   const postMap = byId(posts)
   const commentMap = byId(comments)
   const reelMap = byId(reels)
+  const reelCommentMap = byId(reelComments)
 
   const personIds = new Set()
   rows.forEach((r) => {
     if (r.reporter_id) personIds.add(r.reporter_id)
     if (r.reported_user_id) personIds.add(r.reported_user_id)
   })
-  ;[postMap, commentMap, reelMap].forEach((m) => m.forEach((t) => t.user_id && personIds.add(t.user_id)))
+  ;[postMap, commentMap, reelMap, reelCommentMap].forEach((m) => m.forEach((t) => t.user_id && personIds.add(t.user_id)))
   const { data: people } = personIds.size
     ? await admin.from('profiles').select('id,username,display_name').in('id', Array.from(personIds))
     : { data: [] }
@@ -83,6 +86,11 @@ export default async function ReportsPage({ searchParams }) {
       targetId = r.reported_reel_id
       const t = reelMap.get(targetId)
       target = t ? { content: t.caption, video_url: t.video_url, created_at: t.created_at, user_id: t.user_id } : { missing: true }
+    } else if (r.reported_reel_comment_id) {
+      kind = 'reel_comment'
+      targetId = r.reported_reel_comment_id
+      const t = reelCommentMap.get(targetId)
+      target = t ? { content: t.content, created_at: t.created_at, user_id: t.user_id } : { missing: true }
     } else if (r.reported_message_id) {
       kind = 'message'
       targetId = r.reported_message_id
@@ -121,6 +129,8 @@ export default async function ReportsPage({ searchParams }) {
     canBanPermanent: can(ctx, 'users.ban.permanent'),
     canUnban: can(ctx, 'users.unban'),
     canResolve: can(ctx, 'reports.resolve'),
+    canViewMessage: can(ctx, 'messages.view_reported'),
+    canViewUsers: can(ctx, 'users.view'),
   }
 
   return <ReportsClient key={filter} initial={items} filter={filter} perms={perms} />
