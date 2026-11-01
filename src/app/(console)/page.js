@@ -1,19 +1,9 @@
 import { getStaffContext, can } from '@/lib/staff'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { ACTION_LABELS as LABELS } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
-const LABELS = {
-  'auth.sign_in': 'Signed in',
-  'content.delete': 'Deleted content',
-  'user.ban': 'Banned a user',
-  'user.unban': 'Unbanned a user',
-  'report.status': 'Changed a report',
-  'badge.grant': 'Gave a badge',
-  'badge.remove': 'Removed a badge',
-  'message.view_reported': 'Viewed a reported message',
-  'content.media_delete': 'Removed files from storage',
-}
 
 function when(iso) {
   return new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'

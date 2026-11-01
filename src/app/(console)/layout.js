@@ -12,10 +12,10 @@ export default async function ConsoleLayout({ children }) {
     { label: 'Dashboard', href: '/' },
     { label: 'Reports', href: '/reports', show: can(ctx, 'reports.view') },
     { label: 'Users', href: '/users', show: can(ctx, 'users.view') },
-    { label: 'Ads', soon: true, show: can(ctx, 'ads.review') },
-    { label: 'Pricing', soon: true, show: can(ctx, 'pricing.manage') },
-    { label: 'Team', soon: true, show: can(ctx, 'staff.manage') },
-    { label: 'Audit log', soon: true, show: can(ctx, 'audit.view') },
+    { label: 'Ads', href: '/ads', show: can(ctx, 'ads.review') || can(ctx, 'ads.edit') || can(ctx, 'ads.billing.view') },
+    { label: 'Pricing', href: '/pricing', show: can(ctx, 'pricing.manage') },
+    { label: 'Team', href: '/team', show: can(ctx, 'staff.manage') },
+    { label: 'Audit log', href: '/audit', show: can(ctx, 'audit.view') },
   ].filter((n) => n.show !== false)
 
   return (

@@ -249,3 +249,31 @@ h1 + .seg { margin-top: -4px; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
 .meta.inline { display: inline; font-weight: 400; }
 audio { width: 100%; }
+
+.dlg { max-height: 92dvh; overflow-y: auto; }
+.seg.wrap { flex-wrap: wrap; }
+.badge-on { border-color: var(--blue); color: var(--blue); }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+.check-ok strong { color: var(--blue); }
+.check-bad strong { color: var(--red); }
+.field textarea {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 400;
+  resize: vertical;
+}
+.thumb { max-width: 100%; max-height: 160px; border-radius: 6px; justify-self: start; }
+.perms { display: grid; gap: 6px; }
+.permrow { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; font-weight: 400; }
+.permrow input { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+.permrow span { display: grid; }
+.permrow small { color: var(--muted); font-size: 12px; }
+.permrow-off { opacity: 0.45; }
+.linkbox { display: block; overflow-wrap: anywhere; font-size: 13px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.json { margin: 8px 0 0; padding: 10px; overflow-x: auto; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); }
+details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+.audit .meta { margin-top: 0; }

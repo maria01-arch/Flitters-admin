@@ -26,7 +26,7 @@ export async function middleware(request) {
 
   const { data } = await supabase.auth.getUser()
   const path = request.nextUrl.pathname
-  const open = path.startsWith('/login') || path.startsWith('/api/')
+  const open = path.startsWith('/login') || path.startsWith('/api/') || path.startsWith('/invite/')
   if (!data?.user && !open) {
     const to = request.nextUrl.clone()
     to.pathname = '/login'

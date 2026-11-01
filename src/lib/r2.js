@@ -1,5 +1,5 @@
 import 'server-only'
-import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 
 const PUBLIC_HOST = process.env.R2_PUBLIC_HOST || 'media.xchord.space'
 
@@ -91,4 +91,12 @@ export async function cleanupMedia(admin, urls, allowedPrefixes) {
     }
   }
   return result
+}
+
+export function publicUrlFor(key) {
+  return 'https://' + PUBLIC_HOST + '/' + key
+}
+
+export async function putObject(key, body, contentType) {
+  await client().send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key, Body: body, ContentType: contentType }))
 }
