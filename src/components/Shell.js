@@ -1,28 +1,26 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
+import { usePathname } from 'next/navigation'
 import { getBrowserClient } from '@/lib/supabase/browser'
-import ConfirmDialog from '@/components/ConfirmDialog'
+import Icon from '@/components/Icon'
 
-const IDLE_MS = 30 * 60 * 1000
+const IDLE_MS = 60 * 60 * 1000
 
-export default function Shell({ email, roleName, nav, children }) {
-  const [confirmOut, setConfirmOut] = useState(false)
-  const [busy, setBusy] = useState(false)
+const isOn = (path, href) => (href === '/' ? path === '/' : path === href || path.startsWith(href + '/'))
+
+export default function Shell({ business, children }) {
+  const path = usePathname() || '/'
   const timer = useRef(null)
 
-  async function signOut(reason) {
-    setBusy(true)
-    try {
-      await getBrowserClient().auth.signOut()
-    } catch {}
-    window.location.href = '/login' + (reason ? '?reason=' + reason : '')
-  }
-
-  // Signs out after 30 minutes with no touch, key press or scroll.
+  // Signs out after an hour with no touch, key press or scroll.
   useEffect(() => {
+    const out = async () => {
+      try { await getBrowserClient().auth.signOut() } catch {}
+      window.location.href = '/login?reason=idle'
+    }
     const reset = () => {
       clearTimeout(timer.current)
-      timer.current = setTimeout(() => signOut('idle'), IDLE_MS)
+      timer.current = setTimeout(out, IDLE_MS)
     }
     const events = ['pointerdown', 'keydown', 'scroll', 'touchstart']
     events.forEach((ev) => window.addEventListener(ev, reset, { passive: true }))
@@ -34,42 +32,24 @@ export default function Shell({ email, roleName, nav, children }) {
   }, [])
 
   return (
-    <div className="shell">
-      <header className="topbar">
-        <div className="topbar-id">
-          <strong className="wordmark">Flitters admin</strong>
-          <span className="who">
-            {email} · {roleName}
-          </span>
-        </div>
-        <button type="button" className="btn btn-small" onClick={() => setConfirmOut(true)}>
-          Sign out
-        </button>
+    <div className="app">
+      <header className="appbar">
+        <a className="brand" href="/"><span className="logo-mark">F</span>Flitters <b>Ads</b></a>
+        <nav className="topnav" aria-label="Sections">
+          <a href="/" className={isOn(path, '/') ? 'on' : ''}>Home</a>
+          <a href="/campaigns" className={isOn(path, '/campaigns') ? 'on' : ''}>Campaigns</a>
+          <a href="/account" className={isOn(path, '/account') ? 'on' : ''}>Account</a>
+          <a href="/create" className="on">+ New campaign</a>
+        </nav>
+        <span className="chipbiz">{business}</span>
       </header>
-      <nav className="navbar" aria-label="Sections">
-        {nav.map((n) =>
-          n.soon ? (
-            <span key={n.label} className="navitem navitem-soon" aria-disabled="true">
-              {n.label}
-              <small>soon</small>
-            </span>
-          ) : (
-            <a key={n.label} href={n.href} className="navitem navitem-on">
-              {n.label}
-            </a>
-          )
-        )}
+      <main className="page">{children}</main>
+      <nav className="tabbar" aria-label="Sections">
+        <a href="/" className={'tab' + (isOn(path, '/') ? ' on' : '')}><Icon name="home" />Home</a>
+        <a href="/campaigns" className={'tab' + (isOn(path, '/campaigns') ? ' on' : '')}><Icon name="list" />Campaigns</a>
+        <a href="/create" className="tab tab-new" aria-label="New campaign"><span><Icon name="plus" /></span><em>New ad</em></a>
+        <a href="/account" className={'tab' + (isOn(path, '/account') ? ' on' : '')}><Icon name="user" />Account</a>
       </nav>
-      <main className="main">{children}</main>
-      <ConfirmDialog
-        open={confirmOut}
-        title="Sign out?"
-        message="You will need your password and your 2-step code to get back in."
-        confirmLabel="Sign out"
-        busy={busy}
-        onConfirm={() => signOut()}
-        onCancel={() => setConfirmOut(false)}
-      />
     </div>
   )
 }
