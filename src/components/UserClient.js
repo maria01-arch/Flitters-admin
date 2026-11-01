@@ -29,7 +29,7 @@ export default function UserClient({ user, bannedUntil: initialBan, isStaff, per
       if (dlg.kind === 'ban') {
         const j = await call({ action: 'ban', userId: user.id, hours: hours === 'perm' ? null : Number(hours), reason: reason.trim() })
         setBannedUntil(j.bannedUntil || '2999-01-01T00:00:00Z')
-        setMsg({ ok: true, text: 'User banned.' })
+        setMsg({ ok: true, text: 'User banned.' + (j.profileNote ? ' The reason could not be saved for their ban screen: ' + j.profileNote : '') })
       } else if (dlg.kind === 'unban') {
         await call({ action: 'unban', userId: user.id })
         setBannedUntil(null)

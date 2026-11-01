@@ -99,7 +99,7 @@ export default function ReportsClient({ initial, filter, perms }) {
         })
         setBanned((prev) => ({ ...prev, [item.offenderId]: j.bannedUntil || 'permanent' }))
         setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: 'actioned' } : x)))
-        setMsg({ ok: true, text: 'User banned.' })
+        setMsg({ ok: true, text: 'User banned.' + (j.profileNote ? ' The reason could not be saved for their ban screen: ' + j.profileNote : '') })
       } else if (kind === 'unban') {
         await call({ action: 'unban', userId: item.offenderId, reportId: item.id })
         setBanned((prev) => {

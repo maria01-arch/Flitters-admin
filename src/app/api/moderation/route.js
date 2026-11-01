@@ -57,6 +57,7 @@ export async function POST(req) {
     if (body.action === 'set_report_status') return await setReportStatus(args)
     if (body.action === 'set_badge') return await setBadge(args)
     if (body.action === 'view_message') return await viewMessage(args)
+    if (body.action === 'review_appeal') return await reviewAppeal(args)
     return json(400, { error: 'Unknown action' })
   } catch (err) {
     console.error('Moderation failed:', err)
@@ -180,6 +181,10 @@ async function ban({ ctx, admin, body, ip, reportId }) {
     return json(403, { error: 'You can’t give permanent bans. Choose a length instead.' })
   }
   if (userId === ctx.user.id) return json(400, { error: 'You can’t ban yourself' })
+  // The person sees this on their ban screen, so it is required.
+  const reasonText = String(body.reason || '').trim()
+  if (reasonText.length < 5) return json(400, { error: 'Write a reason (at least 5 characters). The person will see it on their ban screen.' })
+  if (reasonText.length > 300) return json(400, { error: 'The reason is too long (300 characters at most)' })
 
   const { data: staffRow } = await admin.from('staff_members').select('user_id').eq('user_id', userId).maybeSingle()
   if (staffRow) return json(400, { error: 'Staff accounts can’t be banned from here. Remove their staff role first.' })
@@ -190,7 +195,7 @@ async function ban({ ctx, admin, body, ip, reportId }) {
   const bad = await auditFirst(ctx, ip, {
     ...entry,
     after: { length: rounded === null ? 'permanent' : rounded + 'h' },
-    meta: { username: prof?.username || null, reason: snip(body.reason, 300), reportId },
+    meta: { username: prof?.username || null, reason: reasonText, reportId },
   })
   if (bad) return bad
 
@@ -201,8 +206,11 @@ async function ban({ ctx, admin, body, ip, reportId }) {
     await auditFailed(ctx, ip, entry, error.message)
     return json(500, { error: error.message })
   }
+  // What the app's ban screen reads: the reason, and when this ban began (a new
+  // ban lets the person appeal again).
+  const pu = await admin.from('profiles').update({ ban_reason: reasonText, banned_at: new Date().toISOString() }).eq('id', userId)
   if (reportId) await admin.from('reports').update({ status: 'actioned', reviewed_at: new Date().toISOString() }).eq('id', reportId)
-  return json(200, { ok: true, bannedUntil: (data && data.user && data.user.banned_until) || null })
+  return json(200, { ok: true, bannedUntil: (data && data.user && data.user.banned_until) || null, profileNote: pu.error ? pu.error.message : null })
 }
 
 async function unban({ ctx, admin, body, ip, reportId }) {
@@ -218,6 +226,7 @@ async function unban({ ctx, admin, body, ip, reportId }) {
     await auditFailed(ctx, ip, entry, error.message)
     return json(500, { error: error.message })
   }
+  await admin.from('profiles').update({ ban_reason: null }).eq('id', userId)
   return json(200, { ok: true })
 }
 
@@ -306,4 +315,49 @@ async function viewMessage({ ctx, admin, body, ip }) {
       media: urlsFromRows([msg]),
     },
   })
+}
+
+// Accept (lifts the ban) or reject (the note is shown to the person in the app).
+async function reviewAppeal({ ctx, admin, body, ip }) {
+  if (!can(ctx, 'appeals.review')) return json(403, { error: 'You don’t have permission to review appeals' })
+  const id = String(body.appealId || '')
+  const decision = body.decision
+  if (!UUID.test(id) || !['approve', 'reject'].includes(decision)) return json(400, { error: 'Bad request' })
+  const note = String(body.note || '').trim()
+  if (decision === 'reject' && note.length < 5) return json(400, { error: 'Write a reason (at least 5 characters). The person will see it.' })
+  if (note.length > 500) return json(400, { error: 'The note is too long (500 characters at most)' })
+
+  const { data: ap } = await admin.from('ban_appeals').select('*').eq('id', id).maybeSingle()
+  if (!ap) return json(404, { error: 'Appeal not found' })
+  if (ap.status !== 'pending') return json(400, { error: 'This appeal was already decided' })
+  const { data: prof } = await admin.from('profiles').select('username').eq('id', ap.user_id).maybeSingle()
+  const status = decision === 'approve' ? 'approved' : 'rejected'
+  const entry = { action: decision === 'approve' ? 'appeal.approve' : 'appeal.reject', targetType: 'appeal', targetId: id }
+  const bad = await auditFirst(ctx, ip, {
+    ...entry,
+    before: { status: 'pending' },
+    after: { status },
+    meta: { userId: ap.user_id, username: prof?.username || null, note: snip(note, 500) },
+  })
+  if (bad) return bad
+
+  if (decision === 'approve') {
+    const { error } = await admin.auth.admin.updateUserById(ap.user_id, { ban_duration: 'none' })
+    if (error) {
+      await auditFailed(ctx, ip, entry, error.message)
+      return json(500, { error: 'Could not lift the ban: ' + error.message })
+    }
+    await admin.from('profiles').update({ ban_reason: null }).eq('id', ap.user_id)
+  }
+  const upd = await admin
+    .from('ban_appeals')
+    .update({ status, admin_note: note || null, reviewed_at: new Date().toISOString(), reviewed_by: ctx.user.id })
+    .eq('id', id)
+    .eq('status', 'pending')
+    .select('id')
+  if (upd.error || !upd.data || upd.data.length === 0) {
+    await auditFailed(ctx, ip, entry, upd.error ? upd.error.message : 'appeal already decided')
+    return json(500, { error: decision === 'approve' ? 'The ban was lifted, but the appeal could not be marked as accepted. Reload and check.' : 'The appeal could not be updated. Reload and check.' })
+  }
+  return json(200, { ok: true, status })
 }

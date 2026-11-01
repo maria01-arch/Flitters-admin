@@ -12,6 +12,7 @@ export default async function ConsoleLayout({ children }) {
     { label: 'Dashboard', href: '/' },
     { label: 'Reports', href: '/reports', show: can(ctx, 'reports.view') },
     { label: 'Users', href: '/users', show: can(ctx, 'users.view') },
+    { label: 'Appeals', href: '/appeals', show: can(ctx, 'appeals.review') },
     { label: 'Ads', href: '/ads', show: can(ctx, 'ads.review') || can(ctx, 'ads.edit') || can(ctx, 'ads.billing.view') },
     { label: 'Pricing', href: '/pricing', show: can(ctx, 'pricing.manage') },
     { label: 'Team', href: '/team', show: can(ctx, 'staff.manage') },

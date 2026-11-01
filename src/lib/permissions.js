@@ -8,6 +8,7 @@ export const PERMISSIONS = [
   ['users.ban', 'Ban users'],
   ['users.ban.permanent', 'Give permanent bans'],
   ['users.unban', 'Unban users'],
+  ['appeals.review', 'Accept or reject ban appeals'],
   ['badges.grant', 'Give or remove badges'],
   ['ads.review', 'Approve or reject ads'],
   ['ads.edit', 'Create, edit and pause ads'],

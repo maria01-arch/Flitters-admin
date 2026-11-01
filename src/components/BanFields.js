@@ -15,7 +15,7 @@ export default function BanFields({ hours, setHours, reason, setReason, canPerma
         </select>
       </label>
       <label className="field">
-        <span>Reason (kept in the audit log)</span>
+        <span>Reason (the person sees this on their ban screen)</span>
         <input value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} />
       </label>
     </div>

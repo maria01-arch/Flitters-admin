@@ -28,6 +28,8 @@ export const ACTION_LABELS = {
   'user.ban': 'Banned a user',
   'user.unban': 'Unbanned a user',
   'report.status': 'Changed a report',
+  'appeal.approve': 'Accepted a ban appeal',
+  'appeal.reject': 'Rejected a ban appeal',
   'badge.grant': 'Gave a badge',
   'badge.remove': 'Removed a badge',
   'message.view_reported': 'Viewed a reported message',
