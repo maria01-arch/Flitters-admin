@@ -263,7 +263,10 @@ async function currencySet({ ctx, admin, body, ip }) {
   if (!can(ctx, 'pricing.manage')) return json(403, { error: 'You don’t have permission to set prices' })
   const currency = String(body.currency || '').toUpperCase()
   if (!/^[A-Z]{3}$/.test(currency) || typeof body.enabled !== 'boolean') return json(400, { error: 'Bad request' })
-  if (currency === 'USD' && !body.enabled) return json(400, { error: 'USD must stay on. It is the fallback for every other currency.' })
+  if (!body.enabled) {
+    const { data: others } = await admin.from('payment_currencies').select('currency').eq('enabled', true).neq('currency', currency)
+    if (!others || others.length === 0) return json(400, { error: 'At least one currency must stay on.' })
+  }
   const e = { action: 'currency.set', targetType: 'currency', targetId: currency }
   const bad = await auditFirst(ctx, ip, { ...e, after: { enabled: body.enabled } })
   if (bad) return bad

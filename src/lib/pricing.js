@@ -17,11 +17,14 @@ export async function resolveQuote(admin, { country, placement, days }) {
   const { data: rules } = await admin.from('ad_price_rules').select('*').eq('active', true).eq('placement', placement)
   const find = (country_code, currency) => (rules || []).find((r) => (r.country_code || null) === country_code && r.currency === currency)
 
-  let currency = cs && enabledSet.has(cs.currency) ? cs.currency : 'USD'
+  // Fallback currency: USD when it is on, otherwise the first currency that is on.
+  const fallback = enabledSet.has('USD') ? 'USD' : Array.from(enabledSet).sort()[0]
+  if (!fallback) return { error: 'No payment currency is switched on' }
+  let currency = cs && enabledSet.has(cs.currency) ? cs.currency : fallback
   let rule = find(cc, currency) || find(null, currency)
-  if (!rule && currency !== 'USD') {
-    currency = 'USD'
-    rule = find(null, 'USD')
+  if (!rule && currency !== fallback) {
+    currency = fallback
+    rule = find(null, fallback)
   }
   if (!rule) return { error: 'No price is set for this placement yet' }
   if (d < rule.min_days || d > rule.max_days) return { error: 'This price allows ' + rule.min_days + ' to ' + rule.max_days + ' days' }

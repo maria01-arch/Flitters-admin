@@ -161,11 +161,11 @@ export default function PricingClient({ rules: r0, currencies: c0, countrySettin
 
       <section className="card">
         <div className="report-head"><h2>Currencies</h2><button type="button" className="btn btn-small" onClick={() => { setNewCur(''); setDlg('currency') }}>Add currency</button></div>
-        <p className="hint">Only currencies your Paystack account can charge. USD can’t be switched off.</p>
+        <p className="hint">Only switch on currencies your Paystack account can charge. If USD is off, advertisers outside the countries you set pay in the first currency that is on.</p>
         <ul className="chips">
           {currencies.map((c) => (
             <li key={c.currency}>
-              <button type="button" className={'btn btn-small' + (c.enabled ? ' btn-primary' : '')} onClick={() => toggleCurrency(c)} disabled={c.currency === 'USD'}>{c.currency} {c.enabled ? 'on' : 'off'}</button>
+              <button type="button" className={'btn btn-small' + (c.enabled ? ' btn-primary' : '')} onClick={() => toggleCurrency(c)}>{c.currency} {c.enabled ? 'on' : 'off'}</button>
             </li>
           ))}
         </ul>
