@@ -15,16 +15,24 @@ export default function ConfirmDialog({
   children,
 }) {
   const cancelRef = useRef(null)
+  const onCancelRef = useRef(onCancel)
 
+  // Always call the newest onCancel without restarting the effect below.
+  useEffect(() => {
+    onCancelRef.current = onCancel
+  })
+
+  // Runs only when the dialog opens or closes. It must NOT run on every key
+  // press, or focus jumps away from the text box and the phone keyboard closes.
   useEffect(() => {
     if (!open) return undefined
     if (cancelRef.current) cancelRef.current.focus()
     const onKey = (e) => {
-      if (e.key === 'Escape') onCancel()
+      if (e.key === 'Escape') onCancelRef.current()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onCancel])
+  }, [open])
 
   if (!open) return null
   return (
