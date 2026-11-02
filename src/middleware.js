@@ -1,10 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 
-// Keeps the session fresh and sends signed-out visitors to /login.
-// Every page and API route also checks on the server.
-const PUBLIC = ['/login', '/signup', '/auth/', '/api/webhooks/', '/terms', '/ad-policy', '/privacy', '/refunds']
-
+// Keeps the session cookie fresh and sends signed-out visitors to /login.
+// This is only a convenience: every page and API route re-checks on the server.
 export async function middleware(request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -28,8 +26,8 @@ export async function middleware(request) {
 
   const { data } = await supabase.auth.getUser()
   const path = request.nextUrl.pathname
-  const open = PUBLIC.some((p) => path === p || path.startsWith(p.endsWith('/') ? p : p + '/'))
-  if (!data?.user && !open && !path.startsWith('/api/')) {
+  const open = path.startsWith('/login') || path.startsWith('/api/') || path.startsWith('/invite/')
+  if (!data?.user && !open) {
     const to = request.nextUrl.clone()
     to.pathname = '/login'
     to.search = ''

@@ -1,11 +1,7 @@
 import 'server-only'
-import crypto from 'crypto'
-import { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { S3Client, DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 
 const PUBLIC_HOST = process.env.R2_PUBLIC_HOST || 'media.xchord.space'
-export const MAX_IMAGE = 4 * 1024 * 1024
-export const MAX_VIDEO = 30 * 1024 * 1024
 
 export function r2Configured() {
   return !!(process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY && process.env.R2_BUCKET)
@@ -18,90 +14,89 @@ function client() {
       region: 'auto',
       endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
       credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY },
-      // Newer SDK versions add extra checksum fields to upload links that R2
-      // rejects. Only use checksums when a request really needs one.
-      requestChecksumCalculation: 'WHEN_REQUIRED',
-      responseChecksumValidation: 'WHEN_REQUIRED',
     })
   }
   return s3
 }
 
-export const publicUrlFor = (key) => 'https://' + PUBLIC_HOST + '/' + key
-
-// The server picks every file name. The browser never chooses a path.
-export function newKey(advertiserId, ext) {
-  return 'ads/' + advertiserId + '/' + Date.now() + '_' + crypto.randomBytes(6).toString('hex') + '.' + ext
-}
-
-// A key is only accepted if it is inside this advertiser's own folder.
-export function ownsKey(advertiserId, key) {
-  return typeof key === 'string' && key.startsWith('ads/' + advertiserId + '/') && /^[a-zA-Z0-9/_.-]+$/.test(key) && !key.includes('..')
-}
-
-export function ownedKeyFromUrl(advertiserId, url) {
+// https://media.xchord.space/posts/<id>/file.jpg  ->  posts/<id>/file.jpg
+// Also understands Cloudflare image-resizing links (/cdn-cgi/image/<options>/<key>).
+export function keyFromUrl(u) {
   try {
-    const u = new URL(url)
-    if (u.hostname !== PUBLIC_HOST) return null
-    const key = decodeURIComponent(u.pathname.replace(/^\/+/, ''))
-    return ownsKey(advertiserId, key) ? key : null
+    const url = new URL(u)
+    if (url.protocol !== 'https:' || url.hostname !== PUBLIC_HOST) return null
+    let path = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
+    if (path.startsWith('cdn-cgi/image/')) {
+      const rest = path.slice('cdn-cgi/image/'.length)
+      const i = rest.indexOf('/')
+      if (i === -1) return null
+      path = rest.slice(i + 1)
+    }
+    if (!path || path.includes('..') || path.includes('//')) return null
+    return path
   } catch {
     return null
   }
+}
+
+// Every text column ending in _url (image_url, video_url, thumbnail_url ...).
+export function urlsFromRows(rows) {
+  const out = new Set()
+  for (const row of rows || []) {
+    for (const [k, v] of Object.entries(row || {})) {
+      if (/_url$/.test(k) && typeof v === 'string' && v.startsWith('https://')) out.add(v)
+    }
+  }
+  return Array.from(out)
+}
+
+// Another post, reel or comment may still use the same file.
+async function stillUsed(admin, url) {
+  const checks = [['posts', 'image_url'], ['posts', 'video_url'], ['reels', 'video_url'], ['comments', 'image_url']]
+  for (const [table, col] of checks) {
+    const { count, error } = await admin.from(table).select('id', { count: 'exact', head: true }).eq(col, url)
+    if (error) {
+      if (/column|does not exist|schema cache/i.test(error.message)) continue
+      return true // can't tell, so keep the file
+    }
+    if (count > 0) return true
+  }
+  return false
+}
+
+// Deletes files after the database rows are gone. Only touches files inside the
+// owner's own folders (for example posts/<userId>/), never anything else.
+export async function cleanupMedia(admin, urls, allowedPrefixes) {
+  const result = { configured: r2Configured(), deleted: [], skipped: [], failed: [] }
+  if (!result.configured) return result
+  const seen = new Set()
+  for (const url of urls) {
+    const key = keyFromUrl(url)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    if (!allowedPrefixes.some((p) => key.startsWith(p))) {
+      result.skipped.push(key)
+      continue
+    }
+    try {
+      if (await stillUsed(admin, url)) {
+        result.skipped.push(key)
+        continue
+      }
+      await client().send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }))
+      result.deleted.push(key)
+    } catch (err) {
+      console.error('R2 delete failed:', key, err && err.message)
+      result.failed.push(key)
+    }
+  }
+  return result
+}
+
+export function publicUrlFor(key) {
+  return 'https://' + PUBLIC_HOST + '/' + key
 }
 
 export async function putObject(key, body, contentType) {
   await client().send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key, Body: body, ContentType: contentType }))
-}
-
-// A short-lived link the browser uploads a video to directly (Vercel itself
-// only accepts about 4.5 MB per request).
-export function presignPut(key, contentType) {
-  return getSignedUrl(client(), new PutObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key, ContentType: contentType }), { expiresIn: 600 })
-}
-
-export async function deleteObject(key) {
-  try {
-    await client().send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }))
-  } catch {}
-}
-
-async function head(key) {
-  try {
-    const r = await client().send(new HeadObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }))
-    return { size: Number(r.ContentLength || 0), type: String(r.ContentType || '') }
-  } catch {
-    return null
-  }
-}
-
-export async function verifyImage(key) {
-  const h = await head(key)
-  if (!h) return { ok: false, error: 'The image upload did not finish. Try again.' }
-  if (h.size <= 0 || h.size > MAX_IMAGE) return { ok: false, error: 'The image is too big. Use one under 4 MB.' }
-  if (!/^image\/(jpeg|png|webp)$/.test(h.type)) return { ok: false, error: 'Use a JPG, PNG or WebP image' }
-  return { ok: true }
-}
-
-// Size, type and the first bytes (an MP4 starts with "ftyp" at byte 4).
-export async function verifyVideo(key) {
-  const h = await head(key)
-  if (!h) return { ok: false, error: 'The video upload did not finish. Try again.' }
-  let bad = null
-  if (h.size <= 0 || h.size > MAX_VIDEO) bad = 'The video is too big. Use one under 30 MB.'
-  else if (h.type !== 'video/mp4') bad = 'Use an MP4 video'
-  else {
-    try {
-      const r = await client().send(new GetObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key, Range: 'bytes=0-31' }))
-      const bytes = Buffer.from(await r.Body.transformToByteArray())
-      if (bytes.slice(4, 8).toString('latin1') !== 'ftyp') bad = 'That file is not a real MP4 video'
-    } catch {
-      bad = 'Could not check the video. Try again.'
-    }
-  }
-  if (bad) {
-    await deleteObject(key)
-    return { ok: false, error: bad }
-  }
-  return { ok: true }
 }
