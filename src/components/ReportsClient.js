@@ -42,6 +42,7 @@ export default function ReportsClient({ initial, filter, perms }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [banned, setBanned] = useState({})
+  const [reasonFilter, setReasonFilter] = useState('all')
 
   useEffect(() => {
     if (!msg) return undefined
@@ -164,6 +165,20 @@ export default function ReportsClient({ initial, filter, perms }) {
         </a>
       </div>
 
+      {items.length > 1 ? (
+        <div className="seg wrap" aria-label="Filter by reason">
+          {[['all', 'All']].concat(Object.entries(REASONS).map(([k, v]) => [k, v.split(' ')[0] === 'Child' ? 'Child safety' : v.split(' or ')[0]])).map(([k, label]) => {
+            const n = k === 'all' ? items.length : items.filter((x) => x.reason === k).length
+            if (k !== 'all' && n === 0) return null
+            return (
+              <button key={k} type="button" className={'segitem' + (reasonFilter === k ? ' segitem-on' : '')} onClick={() => setReasonFilter(k)}>
+                {label} <span className="segcount">{n}</span>
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
       {items.length === 0 ? (
         <section className="card">
           <h2>{filter === 'pending' ? 'No pending reports' : 'No reports yet'}</h2>
@@ -171,7 +186,7 @@ export default function ReportsClient({ initial, filter, perms }) {
         </section>
       ) : null}
 
-      {items.map((item) => {
+      {items.filter((x) => reasonFilter === 'all' || x.reason === reasonFilter).map((item) => {
         const hasContent = DELETABLE.includes(item.kind)
         const t = item.target
         const m = msgs[item.id]

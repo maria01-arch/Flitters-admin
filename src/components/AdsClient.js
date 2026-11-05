@@ -129,6 +129,7 @@ export default function AdsClient({ tab, status, campaigns: initialCampaigns, ho
   return (
     <>
       <h1>Ads</h1>
+      <p className="lead">Review advertiser campaigns, manage your own house ads, and watch performance.</p>
       <div className="seg">
         {perms.canReview ? <a href="/ads?tab=review" className={'segitem' + (tab === 'review' ? ' segitem-on' : '')}>To review</a> : null}
         <a href="/ads?tab=campaigns" className={'segitem' + (tab === 'campaigns' ? ' segitem-on' : '')}>Campaigns</a>

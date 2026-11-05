@@ -93,6 +93,7 @@ export default function TeamClient({ members, invites, roles, actorPerms, canRol
   return (
     <>
       <h1>Team</h1>
+      <p className="lead">Invite people, change what they can do, or remove their access. Changes work straight away.</p>
       <div className="seg">
         <a href="/team" className="segitem segitem-on">People</a>
         {canRoles ? <a href="/team/roles" className="segitem">Roles</a> : <a href="/team/roles" className="segitem">Roles</a>}

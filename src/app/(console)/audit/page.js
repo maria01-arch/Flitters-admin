@@ -35,6 +35,7 @@ export default async function AuditPage({ searchParams }) {
   return (
     <>
       <h1>Audit log</h1>
+      <p className="lead">A permanent record of what staff did, and when. Entries can’t be edited or removed.</p>
       <form method="get" action="/audit" className="stack">
         <label className="field"><span>What happened</span>
           <select name="action" defaultValue={action}>

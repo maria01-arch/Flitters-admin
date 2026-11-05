@@ -36,6 +36,7 @@ export default function AppealsClient({ initial, filter, canViewUsers }) {
   return (
     <>
       <h1>Appeals</h1>
+      <p className="lead">People who were banned and asked for a second look. Accept to lift the ban, or reject with a reason they will see.</p>
       <div className="seg">
         <a href="/appeals" className={'segitem' + (filter === 'pending' ? ' segitem-on' : '')}>Pending</a>
         <a href="/appeals?filter=all" className={'segitem' + (filter === 'all' ? ' segitem-on' : '')}>All</a>

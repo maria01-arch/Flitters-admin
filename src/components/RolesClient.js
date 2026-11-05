@@ -44,6 +44,7 @@ export default function RolesClient({ roles, actorPerms, canRoles }) {
   return (
     <>
       <h1>Roles</h1>
+      <p className="lead">A role is a set of permissions. Make your own roles for exactly the access someone needs.</p>
       <div className="seg">
         <a href="/team" className="segitem">People</a>
         <a href="/team/roles" className="segitem segitem-on">Roles</a>

@@ -46,6 +46,7 @@ export default function InviteClient({ token, valid, email, roleName, signedInEm
 
   return (
     <div className="login">
+      <img className="login-logo" src="/logo.png" alt="Flitters" width="120" height="95" />
       <div className="login-box">
         <h1 className="login-title">Flitters admin</h1>
         {!valid ? (
