@@ -22,7 +22,7 @@ export default function Shell({ email, roleName, groups, initialCounts, canSearc
 
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups])
   const tabs = useMemo(() => [...flat].sort((a, b) => a.prio - b.prio).slice(0, 5), [flat])
-  const total = (counts.reports || 0) + (counts.ads || 0) + (counts.appeals || 0) + (counts.strikeAppeals || 0) + (counts.tickets || 0)
+  const total = (counts.reports || 0) + (counts.ads || 0) + (counts.appeals || 0)
 
   async function signOut(reason) {
     setBusy(true)

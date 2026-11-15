@@ -6,22 +6,6 @@ export const DURATIONS = [
   { value: 'perm', label: 'Permanent' },
 ]
 
-// Same, for strikes and help requests.
-export async function callHealth(body) {
-  const res = await fetch('/api/health', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const j = await res.json().catch(() => ({}))
-  if (res.status === 401) {
-    window.location.href = '/login'
-    throw new Error('Please sign in again')
-  }
-  if (!res.ok) throw new Error(j.error || 'Something went wrong (' + res.status + ')')
-  return j
-}
-
 // Talks to the moderation route. Sends people to /login if the session ended.
 export async function call(body) {
   const res = await fetch('/api/moderation', {

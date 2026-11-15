@@ -3,7 +3,6 @@ import { getStaffContext, can } from '@/lib/staff'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { utc } from '@/lib/format'
 import UserClient from '@/components/UserClient'
-import StrikesPanel from '@/components/StrikesPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,8 +70,6 @@ export default async function UserPage({ params }) {
     subs = r.data || []
   }
 
-  const strikeRes = await admin.from('account_strikes').select('id,reason_code,reason,severity,content_type,content_snapshot,issued_at,expires_at,status').eq('user_id', id).order('issued_at', { ascending: false }).limit(50)
-
   const perms = {
     canBan: can(ctx, 'users.ban'),
     canBanPermanent: can(ctx, 'users.ban.permanent'),
@@ -128,14 +125,6 @@ export default async function UserPage({ params }) {
         bannedUntil={bannedUntil}
         isStaff={isStaff}
         perms={perms}
-      />
-
-      <StrikesPanel
-        userId={p.id}
-        initial={strikeRes.data || []}
-        missing={!!strikeRes.error}
-        canIssue={can(ctx, 'strikes.issue')}
-        canReview={can(ctx, 'strikes.review')}
       />
 
       {subs.length > 0 ? (

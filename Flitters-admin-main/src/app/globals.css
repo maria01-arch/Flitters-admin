@@ -227,5 +227,3 @@ details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(196, 39, 57, 0.45); } 50% { box-shadow: 0 0 0 6px rgba(196, 39, 57, 0); } }
 @media (prefers-reduced-motion: reduce) { *, html { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
-
-.linkbtn { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--ink); text-decoration: underline; cursor: pointer; }
