@@ -30,6 +30,7 @@ export const ACTION_LABELS = {
   'report.status': 'Changed a report',
   'appeal.approve': 'Accepted a ban appeal',
   'appeal.reject': 'Rejected a ban appeal',
+  'ad_comment.delete': 'Removed an ad comment',
   'strike.issue': 'Gave a strike',
   'strike.overturn': 'Removed a strike',
   'strike.appeal_uphold': 'Kept a strike after appeal',

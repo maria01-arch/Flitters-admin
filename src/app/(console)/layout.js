@@ -20,6 +20,7 @@ export default async function ConsoleLayout({ children }) {
         { label: 'Appeals', href: '/appeals', icon: 'message', badge: 'appeals', prio: 4, show: can(ctx, 'appeals.review') },
         { label: 'Strike appeals', short: 'Strikes', href: '/strike-appeals', icon: 'shield', badge: 'strikeAppeals', prio: 9, show: can(ctx, 'strikes.review') },
         { label: 'Help requests', short: 'Help', href: '/tickets', icon: 'message', badge: 'tickets', prio: 10, show: can(ctx, 'tickets.view') },
+        { label: 'Ad comments', short: 'Comments', href: '/ad-comments', icon: 'message', prio: 11, show: can(ctx, 'ads.review') },
         { label: 'Users', href: '/users', icon: 'user', prio: 5, show: can(ctx, 'users.view') },
       ],
     },

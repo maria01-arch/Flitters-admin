@@ -20,6 +20,7 @@ export async function POST(req) {
       case 'review_strike_appeal': return await reviewStrikeAppeal({ ctx, body, ip, admin })
       case 'reply_ticket': return await replyTicket({ ctx, body, ip, admin })
       case 'set_ticket_status': return await setTicketStatus({ ctx, body, ip, admin })
+      case 'delete_ad_comment': return await deleteAdComment({ ctx, body, ip, admin })
       default: return json(400, { error: 'Unknown action' })
     }
   } catch (err) {
@@ -174,4 +175,22 @@ async function setTicketStatus({ ctx, body, ip, admin }) {
     return json(500, { error: error.message })
   }
   return json(200, { ok: true, status })
+}
+
+// Ad comments (Batch 4): staff with ad-review rights can remove a comment under an ad.
+async function deleteAdComment({ ctx, body, ip, admin }) {
+  if (!can(ctx, 'ads.review')) return json(403, { error: 'You don’t have permission to remove ad comments' })
+  const id = String(body.commentId || '')
+  if (!UUID.test(id)) return json(400, { error: 'Bad request' })
+  const { data: c } = await admin.from('ad_comments').select('id,ad_id,user_id,content').eq('id', id).maybeSingle()
+  if (!c) return json(404, { error: 'This comment no longer exists' })
+  const base = { action: 'ad_comment.delete', targetType: 'user', targetId: c.user_id }
+  const bad = await auditFirst(ctx, ip, { ...base, before: { comment_id: id, ad_id: c.ad_id, content: snip(c.content, 200) } })
+  if (bad) return bad
+  const { error } = await admin.from('ad_comments').delete().eq('id', id)
+  if (error) {
+    await auditFailed(ctx, ip, base, error.message)
+    return json(500, { error: error.message })
+  }
+  return json(200, { ok: true })
 }
