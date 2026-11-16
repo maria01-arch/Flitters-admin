@@ -134,11 +134,12 @@ async function deleteContent({ ctx, admin, body, ip, reportId }) {
   }
 
   if (type === 'reel_comment') {
-    const { data: rc } = await admin.from('reel_comments').select('id,user_id,content').eq('id', id).maybeSingle()
+    // Reel comments live in the comments table (reel_id set); there is no reel_comments table.
+    const { data: rc } = await admin.from('comments').select('id,user_id,content').eq('id', id).not('reel_id', 'is', null).maybeSingle()
     if (!rc) return json(404, { error: 'This comment no longer exists' })
     const bad = await auditFirst(ctx, ip, { ...base, before: { user_id: rc.user_id, content: snip(rc.content) }, meta: { reportId } })
     if (bad) return bad
-    const { error } = await admin.from('reel_comments').delete().eq('id', id)
+    const { error } = await admin.from('comments').delete().eq('id', id).not('reel_id', 'is', null)
     if (error) {
       await auditFailed(ctx, ip, base, error.message)
       return json(500, { error: error.message })

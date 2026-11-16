@@ -47,7 +47,7 @@ export default async function ReportsPage({ searchParams }) {
     postIds.length ? admin.from('posts').select('id,user_id,content,image_url,video_url,created_at').in('id', postIds) : none,
     commentIds.length ? admin.from('comments').select('id,user_id,content,created_at').in('id', commentIds) : none,
     reelIds.length ? admin.from('reels').select('id,user_id,video_url,caption,created_at').in('id', reelIds) : none,
-    reelCommentIds.length ? admin.from('reel_comments').select('id,user_id,content,created_at').in('id', reelCommentIds) : none,
+    reelCommentIds.length ? admin.from('comments').select('id,user_id,content,created_at').in('id', reelCommentIds) : none,
   ])
   const byId = (res) => new Map((res.data || []).map((x) => [x.id, x]))
   const postMap = byId(posts)

@@ -18,6 +18,8 @@ export default async function ConsoleLayout({ children }) {
       items: [
         { label: 'Reports', href: '/reports', icon: 'flag', badge: 'reports', prio: 2, show: can(ctx, 'reports.view') },
         { label: 'Appeals', href: '/appeals', icon: 'message', badge: 'appeals', prio: 4, show: can(ctx, 'appeals.review') },
+        { label: 'Strike appeals', short: 'Strikes', href: '/strike-appeals', icon: 'shield', badge: 'strikeAppeals', prio: 9, show: can(ctx, 'strikes.review') },
+        { label: 'Help requests', short: 'Help', href: '/tickets', icon: 'message', badge: 'tickets', prio: 10, show: can(ctx, 'tickets.view') },
         { label: 'Users', href: '/users', icon: 'user', prio: 5, show: can(ctx, 'users.view') },
       ],
     },
@@ -39,7 +41,7 @@ export default async function ConsoleLayout({ children }) {
     .map((g) => ({ ...g, items: g.items.filter((i) => i.show !== false).map(({ show, ...rest }) => rest) }))
     .filter((g) => g.items.length > 0)
 
-  let counts = { reports: null, urgent: null, ads: null, appeals: null }
+  let counts = { reports: null, urgent: null, ads: null, appeals: null, strikeAppeals: null, tickets: null }
   try {
     counts = await getCounts(createAdminClient(), ctx)
   } catch (err) {
