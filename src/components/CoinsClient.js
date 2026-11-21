@@ -14,7 +14,7 @@ export default function CoinsClient({ gifts: g0, packs: p0, activity, config, wi
   const [gifts, setGifts] = useState(g0)
   const [packs, setPacks] = useState(p0)
   const [msg, setMsg] = useState(null)
-  const [cfg, setCfg] = useState(config || { receiver_share_pct: 70, coins_per_usd: 100, min_withdraw_coins: 1000, withdraw_opens_at: '2027-01-05T08:00:00Z' })
+  const [cfg, setCfg] = useState(config || { receiver_share_pct: 70, coins_per_usd: 10, min_withdraw_coins: 100, withdraw_opens_at: '2027-01-05T08:00:00Z' })
   const [wds, setWds] = useState(w0 || [])
   const [adj, setAdj] = useState({ username: '', delta: '', reason: '' })
   const [busy, setBusy] = useState(false)
@@ -49,6 +49,17 @@ export default function CoinsClient({ gifts: g0, packs: p0, activity, config, wi
           <label>Withdrawals open (UTC) <input type="datetime-local" value={String(cfg.withdraw_opens_at).slice(0, 16)} onChange={(e) => setCfg({ ...cfg, withdraw_opens_at: e.target.value + ':00Z' })} /></label>
           <button className="btn" disabled={busy} onClick={() => run(() => post({ action: 'save_config', ...cfg }), 'Rules saved.')}>Save</button>
         </div>
+        <hr />
+        <div className="spread" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <label><input type="checkbox" checked={!!cfg.play_purchase_enabled} onChange={(e) => setCfg({ ...cfg, play_purchase_enabled: e.target.checked })} /> Sell coins with Google Play in the app</label>
+          <label>Website link in the app <select value={cfg.web_link_mode || 'off'} onChange={(e) => setCfg({ ...cfg, web_link_mode: e.target.value })}>
+            <option value="off">Off (recommended)</option>
+            <option value="allowed_regions">Only US, UK and EEA phones</option>
+            <option value="always">Everyone (breaks Google’s rules in most countries)</option>
+          </select></label>
+          <input style={{ minWidth: 220 }} value={cfg.web_buy_url || ''} onChange={(e) => setCfg({ ...cfg, web_buy_url: e.target.value })} aria-label="Website address" />
+        </div>
+        <p className="hint">Google’s payments policy says apps selling virtual currency must use Google Play billing, and may not point people to another way to pay, except in regions covered by Google’s link-out programme. Showing the link where it isn’t allowed can get the app removed. Save after changing.</p>
         <p className="hint">Only coins earned from gifts can be withdrawn. Changing the share affects new gifts only.</p>
       </section>
 
@@ -86,12 +97,13 @@ export default function CoinsClient({ gifts: g0, packs: p0, activity, config, wi
       <button className="btn" onClick={() => setGifts((a) => [...a, { id: 'new_gift', name: 'New gift', emoji: '🎁', cost: 10, sort: a.length + 1, active: true }])}>Add a gift</button>
 
       <h2>Coin packs</h2>
-      <p className="hint">The product id must match an in-app product in Play Console exactly. Prices are set in Play Console, not here.</p>
+      <p className="hint">Website price is in US cents (500 = $5.00); the website converts it to Naira at checkout. The product id must match an in-app product in Play Console only if you sell with Google Play, whose prices are set there.</p>
       {packs.map((x, i) => (
         <section className="card" key={x.sku + i}>
           <div className="spread" style={{ gap: 8, flexWrap: 'wrap' }}>
             <input value={x.sku} onChange={(e) => setP(i, 'sku', e.target.value)} aria-label="Product id" />
             <input style={{ width: 100 }} type="number" value={x.coins} onChange={(e) => setP(i, 'coins', e.target.value)} aria-label="Coins" />
+            <input style={{ width: 110 }} type="number" value={x.price_usd_cents ?? ''} placeholder="US cents" onChange={(e) => setP(i, 'price_usd_cents', e.target.value)} aria-label="Website price in US cents" />
             <input style={{ width: 130 }} value={x.label || ''} placeholder="Label" onChange={(e) => setP(i, 'label', e.target.value)} aria-label="Label" />
             <input style={{ width: 70 }} type="number" value={x.sort} onChange={(e) => setP(i, 'sort', e.target.value)} aria-label="Order" />
             <label><input type="checkbox" checked={x.active} onChange={(e) => setP(i, 'active', e.target.checked)} /> On</label>

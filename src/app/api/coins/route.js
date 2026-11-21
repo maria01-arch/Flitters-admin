@@ -51,7 +51,9 @@ async function savePack({ ctx, body, ip, admin }) {
   const sort = int(body.sort ?? 0, 0, 9999)
   if (!/^flitcoins_[a-z0-9_]{1,40}$/.test(sku)) return json(400, { error: 'The product id must start with flitcoins_ and match Play Console exactly' })
   if (coins == null || sort == null) return json(400, { error: 'Coins must be a whole number' })
-  const row = { sku, coins, label: snip(String(body.label || '').trim(), 30) || null, sort, active: body.active !== false }
+  const price = body.price_usd_cents == null || body.price_usd_cents === '' ? null : int(body.price_usd_cents, 1, 100000000)
+  if (body.price_usd_cents != null && body.price_usd_cents !== '' && price == null) return json(400, { error: 'Price must be a whole number of US cents' })
+  const row = { sku, coins, label: snip(String(body.label || '').trim(), 30) || null, sort, active: body.active !== false, price_usd_cents: price }
   const { data: before } = await admin.from('coin_packs').select('*').eq('sku', sku).maybeSingle()
   const base = { action: 'coins.save_pack', targetType: 'coin_pack', targetId: sku }
   const bad = await auditFirst(ctx, ip, { ...base, before: before || null, after: row })
@@ -82,9 +84,13 @@ async function saveConfig({ ctx, body, ip, admin }) {
   const share = int(body.receiver_share_pct, 0, 100)
   const per = int(body.coins_per_usd, 1, 100000)
   const min = int(body.min_withdraw_coins, 0, 100000000)
+  const mode = String(body.web_link_mode || 'off')
+  if (!['off', 'allowed_regions', 'always'].includes(mode)) return json(400, { error: 'Bad link mode' })
+  const buyUrl = String(body.web_buy_url || '').trim()
+  if (!/^https:\/\/[^\s]+$/i.test(buyUrl)) return json(400, { error: 'The website link must start with https://' })
   const opens = new Date(body.withdraw_opens_at)
   if (share == null || per == null || min == null || isNaN(opens.getTime())) return json(400, { error: 'Check the numbers and the date' })
-  const row = { id: true, receiver_share_pct: share, coins_per_usd: per, min_withdraw_coins: min, withdraw_opens_at: opens.toISOString() }
+  const row = { id: true, receiver_share_pct: share, coins_per_usd: per, min_withdraw_coins: min, withdraw_opens_at: opens.toISOString(), play_purchase_enabled: body.play_purchase_enabled === true, web_link_mode: mode, web_buy_url: buyUrl }
   const { data: before } = await admin.from('coin_config').select('*').maybeSingle()
   const base = { action: 'coins.save_config', targetType: 'coin_config', targetId: 'main' }
   const bad = await auditFirst(ctx, ip, { ...base, before: before || null, after: row })

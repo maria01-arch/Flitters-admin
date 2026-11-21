@@ -16,13 +16,14 @@ export default async function CoinsPage() {
     )
   }
   const admin = createAdminClient()
-  const [gifts, packs, buys, sent, cfgR, wdR] = await Promise.all([
+  const [gifts, packs, buys, sent, cfgR, wdR, ordR] = await Promise.all([
     admin.from('gift_items').select('*').order('sort'),
     admin.from('coin_packs').select('*').order('sort'),
     admin.from('coin_purchases').select('id,user_id,sku,coins,created_at').order('created_at', { ascending: false }).limit(25),
     admin.from('gifts_sent').select('id,sender_id,receiver_id,emoji,gift_name,cost,context,created_at').order('created_at', { ascending: false }).limit(25),
     admin.from('coin_config').select('*').maybeSingle(),
     admin.from('withdrawal_requests').select('id,user_id,coins,usd_cents,status,note,created_at').order('created_at', { ascending: false }).limit(50),
+    admin.from('coin_orders').select('id,user_id,coins,usd_cents,charge_amount,charge_currency,status,reference,created_at').order('created_at', { ascending: false }).limit(25),
   ])
   if (gifts.error || packs.error) {
     return (
@@ -33,11 +34,12 @@ export default async function CoinsPage() {
       </section>
     )
   }
-  const ids = Array.from(new Set([...(wdR.data || []).map((r) => r.user_id), ...(buys.data || []).map((r) => r.user_id), ...(sent.data || []).flatMap((r) => [r.sender_id, r.receiver_id])]))
+  const ids = Array.from(new Set([...(ordR.data || []).map((r) => r.user_id), ...(wdR.data || []).map((r) => r.user_id), ...(buys.data || []).map((r) => r.user_id), ...(sent.data || []).flatMap((r) => [r.sender_id, r.receiver_id])]))
   const pr = ids.length ? await admin.from('profiles').select('id,username').in('id', ids) : { data: [] }
   const name = new Map((pr.data || []).map((p) => [p.id, p.username || 'user']))
   const activity = [
     ...(buys.data || []).map((r) => ({ id: 'b' + r.id, at: r.created_at, text: '@' + name.get(r.user_id) + ' bought ' + r.coins.toLocaleString() + ' coins' })),
+    ...(ordR.data || []).map((r) => ({ id: 'o' + r.id, at: r.created_at, text: '@' + name.get(r.user_id) + ' website order: ' + r.coins.toLocaleString() + ' coins, $' + (r.usd_cents / 100).toFixed(2) + ' (' + (r.charge_amount / 100).toLocaleString() + ' ' + r.charge_currency + ') · ' + r.status + ' · ' + r.reference })),
     ...(sent.data || []).map((r) => ({ id: 'g' + r.id, at: r.created_at, text: '@' + name.get(r.sender_id) + ' sent ' + r.emoji + ' ' + r.gift_name + ' (' + r.cost + ') to @' + name.get(r.receiver_id) + ' · ' + r.context })),
   ].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 40)
   const withdrawals = (wdR.data || []).map((r) => ({ ...r, username: name.get(r.user_id) || 'user' }))
