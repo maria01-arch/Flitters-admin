@@ -19,6 +19,7 @@ export const PERMISSIONS = [
   ['ads.billing.view', 'See ad payments and amounts'],
   ['ads.refund', 'Record ad refunds'],
   ['pricing.manage', 'Set ad prices'],
+  ['coins.manage', 'Manage Flit coins: gifts, coin packs and balances'],
   ['subscriptions.view', 'See subscriptions'],
   ['announcements.manage', 'Manage announcements'],
   ['staff.manage', 'Invite and manage staff'],

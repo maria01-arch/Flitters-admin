@@ -29,6 +29,7 @@ export default async function ConsoleLayout({ children }) {
       items: [
         { label: 'Ads', href: '/ads', icon: 'megaphone', badge: 'ads', prio: 3, show: can(ctx, 'ads.review') || can(ctx, 'ads.edit') || can(ctx, 'ads.billing.view') },
         { label: 'Pricing', href: '/pricing', icon: 'tag', prio: 8, show: can(ctx, 'pricing.manage') },
+        { label: 'Flit coins', short: 'Coins', href: '/coins', icon: 'tag', prio: 12, show: can(ctx, 'coins.manage') },
       ],
     },
     {
